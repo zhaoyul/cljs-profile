@@ -194,14 +194,13 @@
 
 (defn hex->rgb
   [color]
-  (try
+  (if (and (string? color) (str/starts-with? color "#"))
     (let [rgb (js/parseInt (subs color 1) 16)
           r   (bit-shift-right rgb 16)
           g   (bit-and (bit-shift-right rgb 8) 255)
           b   (bit-and rgb 255)]
       [r g b])
-    (catch :default _cause
-      [0 0 0])))
+    [0 0 0]))
 
 (defn hex->rgba
   [data opacity]
@@ -235,7 +234,7 @@
   "输入各种颜色内容转成rgba"
   [color opacity]
   (cond
-    (valid-hex-color? color)
+    (and (string? color) (= \# (nth color 0 nil)))
     (let [rgba (hex->rgba color opacity)]
       (rgb->str rgba))
 
@@ -252,8 +251,7 @@
       (rgb->str rgba))
     :else color))
 
-(def color-to-rgba (memoize  color-to-rgba-impl)
-  )
+(def color-to-rgba (memoize color-to-rgba-impl))
 
 (defn linear-radial-color
   "实现纯色,线性渐变,径向渐变
@@ -278,25 +276,37 @@
 (defn find-box-shadow
   "找box的阴影内容"
   ([shape]
-   (let [shadows  (first (:shadow shape))
-         shadow (assoc shadows
-                       :color (get-in shadows [:color :color])
-                       :opacity (get-in shadows [:color :opacity]) )]
-     (find-box-shadow shape shadow)))
-  ([shape shadows]
-   (p :find-box-shadow
-      (let [color (color-to-rgba (get shadows :color)
-                                 (get shadows :opacity))
-            inner-shadow-out (if (= :inner-shadow (keyword (:style shadows)))
-                               "inset"
+   (p :find-box-shadow-1-arity
+      (let [shadows (nth (:shadow shape) 0 nil)
+            c-map   (:color shadows)
+            style   (:style shadows)
+            color   (:color c-map)
+            opacity (:opacity c-map)
+            inner-shadow-out (if (or (= :inner-shadow style) (= "inner-shadow" style))
+                               "inset "
                                "")
-            box-shadow       (str inner-shadow-out " "
-                                  (:offset-x shadows) "px "
-                                  (:offset-y shadows) "px "
-                                  (:blur shadows) "px "
-                                  (:spread shadows) "px "
-                                  color)]
-        box-shadow))))
+            color-str        (color-to-rgba color opacity)]
+        (str inner-shadow-out
+             (:offset-x shadows) "px "
+             (:offset-y shadows) "px "
+             (:blur shadows) "px "
+             (:spread shadows) "px "
+             color-str))))
+  ([shape shadows]
+   (p :find-box-shadow-2-arity
+      (let [style   (:style shadows)
+            color   (:color shadows)
+            opacity (:opacity shadows)
+            inner-shadow-out (if (or (= :inner-shadow style) (= "inner-shadow" style))
+                               "inset "
+                               "")
+            color-str        (color-to-rgba color opacity)]
+        (str inner-shadow-out
+             (:offset-x shadows) "px "
+             (:offset-y shadows) "px "
+             (:blur shadows) "px "
+             (:spread shadows) "px "
+             color-str)))))
 
 (def component-css-shape-keys
   [:rx :ry :r1 :r2 :r3 :r4 :fills :strokes :shadow :auto-width :auto-height])
@@ -560,7 +570,29 @@
         ;; 宽度：自适应宽度或100%填充
         width                      (if (:auto-width shape) "fit-content" "100%")
         ;; 高度：自适应高度或100%填充
-        height                     (if (:auto-height shape) "fit-content" "100%")]
+        height                     (if (:auto-height shape) "fit-content" "100%")
+        
+        ;; === Box Shadow 计算提前 ===
+        box-shadow-val            (if shadow
+                                    (find-box-shadow shape shadow) ; 自定义阴影
+                                    (find-box-shadow shape))       ; 默认阴影
+        
+        ;; === Background 计算提前 ===
+        background-val            (p :final-map-bg
+                                     (cond
+                                       ;; -------- 禁用状态背景色 --------
+                                       (and (some? operation)
+                                            (not operation)
+                                            hidden-color)
+                                       hidden-color
+
+                                       ;; -------- 背景动画开启：清空背景 --------
+                                       bg-open
+                                       ""
+
+                                       ;; -------- 默认背景：来自 background 配置 --------
+                                       :else
+                                       (:background background)))]
     ;; === 样式对象构建 ===
     ;; 使用cond->进行条件式样式合并，基础样式始终存在
     ;; 生成组件最终样式（无 cond->，一次性构造 map）
@@ -571,24 +603,8 @@
         :lineHeight      0                    ; 行高为 0，避免文本偏移
         :overflow        "hidden"             ; 隐藏溢出内容
         :borderRadius    border-radius        ; 圆角半径
-        :boxShadow       (if shadow
-                           (find-box-shadow shape shadow) ; 自定义阴影
-                           (find-box-shadow shape))       ; 默认阴影
-        :border          border                ; 边框样式
-        :opacity         opacity               ; 控件透明度（影响背景/图片/内容）
-        :background
-        (p :final-map-bg
-           (cond
-             ;; -------- 禁用状态背景色 --------
-             (and (some? operation)
-                  (not operation)
-                  hidden-color)
-             hidden-color
+        :boxShadow       box-shadow-val       ; 阴影
+        :border          border               ; 边框样式
+        :opacity         opacity              ; 控件透明度（影响背景/图片/内容）
+        :background      background-val})))   ; 背景
 
-             ;; -------- 背景动画开启：清空背景 --------
-             bg-open
-             ""
-
-             ;; -------- 默认背景：来自 background 配置 --------
-             :else
-             (:background background)))})))
