@@ -231,8 +231,7 @@
       (str/fmt "radial-gradient(ellipse, %s)" stops-css))))
 
 ;; --- Original Component CSS Logic ---
-
-(defn color-to-rgba
+(defn color-to-rgba-impl
   "输入各种颜色内容转成rgba"
   [color opacity]
   (cond
@@ -252,6 +251,9 @@
           rgba (hex->rgba hex opacity)]
       (rgb->str rgba))
     :else color))
+
+(def color-to-rgba (memoize  color-to-rgba-impl)
+  )
 
 (defn linear-radial-color
   "实现纯色,线性渐变,径向渐变
