@@ -18,12 +18,8 @@
   (profile
    {}
    (dotimes [_ 50000]
-     (p :prepare-args
-        (ccss/prepare-component-css-args mock-args))
      (p :component-css
-        (ccss/component-css mock-args))
-     (p :hex->rgba
-        (ccss/hex->rgba "#ff0000" 0.5)))))
+        (ccss/component-css mock-args)))))
 
 (defn main []
   (run-profile))

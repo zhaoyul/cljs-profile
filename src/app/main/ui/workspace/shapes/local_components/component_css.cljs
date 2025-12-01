@@ -283,18 +283,18 @@
      (find-box-shadow shape shadow)))
   ([shape shadows]
    (p :find-box-shadow
-   (let [color (color-to-rgba (get shadows :color)
-                              (get shadows :opacity))
-         inner-shadow-out (if (= :inner-shadow (keyword (:style shadows)))
-                            "inset"
-                            "")
-         box-shadow       (str inner-shadow-out " "
-                               (:offset-x shadows) "px "
-                               (:offset-y shadows) "px "
-                               (:blur shadows) "px "
-                               (:spread shadows) "px "
-                               color)]
-     box-shadow))))
+      (let [color (color-to-rgba (get shadows :color)
+                                 (get shadows :opacity))
+            inner-shadow-out (if (= :inner-shadow (keyword (:style shadows)))
+                               "inset"
+                               "")
+            box-shadow       (str inner-shadow-out " "
+                                  (:offset-x shadows) "px "
+                                  (:offset-y shadows) "px "
+                                  (:blur shadows) "px "
+                                  (:spread shadows) "px "
+                                  color)]
+        box-shadow))))
 
 (def component-css-shape-keys
   [:rx :ry :r1 :r2 :r3 :r4 :fills :strokes :shadow :auto-width :auto-height])
@@ -326,13 +326,13 @@
   (let [;; === 边框圆角处理 ===
         ;; 支持两种圆角模式：统一圆角(rx/ry)和四角独立圆角(r1/r2/r3/r4)
         border-radius              (p :border-radius-calc
-                                     (if (contains? shape :rx)
-                                       (str (or (:rx shape) 0) "px "
-                                            (or (:ry shape) 0) "px")
-                                       (str (or (:r1 shape) 0) "px "
-                                            (or (:r2 shape) 0) "px "
-                                            (or (:r3 shape) 0) "px "
-                                            (or (:r4 shape) 0) "px")))
+                                      (if (contains? shape :rx)
+                                        (str (or (:rx shape) 0) "px "
+                                             (or (:ry shape) 0) "px")
+                                        (str (or (:r1 shape) 0) "px "
+                                             (or (:r2 shape) 0) "px "
+                                             (or (:r3 shape) 0) "px "
+                                             (or (:r4 shape) 0) "px")))
         ;; === 按下状态相关属性 ===
         {:keys [click-down-color
                 click-down-image]} property
@@ -377,19 +377,19 @@
         ;; === 背景颜色计算 ===
         ;; 优先级：按下状态颜色 > 渐变色 > 普通填充色
         background-color           (p :background-color-calc
-                                     (if (and is-pressed? (not (str/blank? (:color click-down-color))))
-                                       ;; 按下状态：使用按下时的颜色配置
-                                       (let [click-color   (:color click-down-color)
-                                             click-opacity (-> click-down-color :opacity)
-                                             [cr cg cb ca] (hex->rgba click-color click-opacity)]
-                                         (str "rgba(" cr ", " cg ", " cb ", " ca ")"))
-                                       ;; 非按下状态：检查是否有渐变色
-                                       (if fill-color-gradient
-                                         ;; 有渐变：转换渐变为CSS格式
-                                         (gradient->css fill-color-gradient)
-                                         ;; 无渐变：使用普通颜色
-                                         (when (and (some? fill-color) (some? fill-opacity))
-                                           (str "rgba(" r ", " g ", " b ", " a ")")))))
+                                      (if (and is-pressed? (not (str/blank? (:color click-down-color))))
+                                        ;; 按下状态：使用按下时的颜色配置
+                                        (let [click-color   (:color click-down-color)
+                                              click-opacity (-> click-down-color :opacity)
+                                              [cr cg cb ca] (hex->rgba click-color click-opacity)]
+                                          (str "rgba(" cr ", " cg ", " cb ", " ca ")"))
+                                        ;; 非按下状态：检查是否有渐变色
+                                        (if fill-color-gradient
+                                          ;; 有渐变：转换渐变为CSS格式
+                                          (gradient->css fill-color-gradient)
+                                          ;; 无渐变：使用普通颜色
+                                          (when (and (some? fill-color) (some? fill-opacity))
+                                            (str "rgba(" r ", " g ", " b ", " a ")")))))
         ;; === 背景图片处理 ===
         ;; 背景图片的优先级和来源判断
         ;; 缓存重复计算的变量
@@ -401,29 +401,29 @@
         remove-img-flag            (:remove-img property-fill)
         
         background-image           (p :background-image-calc
-                                     (if (and is-pressed? (seq click-down-image-data))
-                                       ;; 按下状态：使用按下时的图片
-                                       (let [image-type (:mtype click-down-image-data)
-                                             image-data (:img-base64 click-down-image-data)]
-                                         (str "url(data:" image-type ";base64," image-data ")"))
-                                       ;; 非按下状态：检查是否启用图片显示
-                                       (if (and
-                                            ;; 检查图片显示开关（图形对象是true/false,其他控件没有这个字段）
-                                            (or (nil? use-image-flag) use-image-flag)
-                                            ;; 检查是否有图片源（脚本设置或填充图片）
-                                            (or script-set-image
-                                                (not-empty fill-image-data)))
-                                         (if script-set-image
-                                           ;; 脚本设置的图片：从全局图片库获取
-                                           (str "url(" (get graphic-all (keyword script-set-image)) ")")
-                                           ;; 填充图片：根据移除标志决定是否显示
-                                           (if remove-img-flag
-                                             ;; 移除图片：使用空的base64数据
-                                             (str "url(data:" fill-image-mtype ";base64," "" ")")
-                                             ;; 显示图片：使用完整的base64数据
-                                             (str "url(data:" fill-image-mtype ";base64," fill-image-base64 ")")))
-                                         ;; 不显示图片
-                                         nil)))
+                                      (if (and is-pressed? (seq click-down-image-data))
+                                        ;; 按下状态：使用按下时的图片
+                                        (let [image-type (:mtype click-down-image-data)
+                                              image-data (:img-base64 click-down-image-data)]
+                                          (str "url(data:" image-type ";base64," image-data ")"))
+                                        ;; 非按下状态：检查是否启用图片显示
+                                        (if (and
+                                             ;; 检查图片显示开关（图形对象是true/false,其他控件没有这个字段）
+                                             (or (nil? use-image-flag) use-image-flag)
+                                             ;; 检查是否有图片源（脚本设置或填充图片）
+                                             (or script-set-image
+                                                 (not-empty fill-image-data)))
+                                          (if script-set-image
+                                            ;; 脚本设置的图片：从全局图片库获取
+                                            (str "url(" (get graphic-all (keyword script-set-image)) ")")
+                                            ;; 填充图片：根据移除标志决定是否显示
+                                            (if remove-img-flag
+                                              ;; 移除图片：使用空的base64数据
+                                              (str "url(data:" fill-image-mtype ";base64," "" ")")
+                                              ;; 显示图片：使用完整的base64数据
+                                              (str "url(data:" fill-image-mtype ";base64," fill-image-base64 ")")))
+                                          ;; 不显示图片
+                                          nil)))
         ;; === 预览模式下的背景图片处理 ===
         background-image-url       (if cached-fill-image
                                      ;; 变量绑定的图片：从全局图片库获取
@@ -447,20 +447,20 @@
                                      " center / 100% 100% no-repeat") ; 拉伸填充整个区域
         ;; === 最终背景样式组合 ===
         background                 (p :background-final-calc
-                                     (if viewer?
-                                       ;; 预览模式：优先使用表达式背景色，然后是普通背景色
-                                       {:background
-                                        (str (or
-                                              view-expression-bg-color  ; 表达式背景色
-                                              background-color)         ; 普通背景色
-                                             " "
-                                             background-image-url       ; 背景图片URL
-                                             fill-method)}              ; 填充方式
-                                       ;; 编辑模式：根据是否有背景图片决定样式
-                                       (if (not-empty background-image)
-                                         {:background (str background-color " " background-image
-                                                           fill-method)}
-                                         {:background background-color})))
+                                      (if viewer?
+                                        ;; 预览模式：优先使用表达式背景色，然后是普通背景色
+                                        {:background
+                                         (str (or
+                                               view-expression-bg-color  ; 表达式背景色
+                                               background-color)         ; 普通背景色
+                                              " "
+                                              background-image-url       ; 背景图片URL
+                                              fill-method)}              ; 填充方式
+                                        ;; 编辑模式：根据是否有背景图片决定样式
+                                        (if (not-empty background-image)
+                                          {:background (str background-color " " background-image
+                                                            fill-method)}
+                                          {:background background-color})))
         ;; === 边框样式处理 ===
         ;; 获取第一个描边配置（通常只有一个描边）
         strokes                    (first (:strokes shape))
@@ -493,17 +493,17 @@
                                         " " border-style)
         ;; 最终边框样式：预览模式优先使用变量值，否则使用默认值
         border                     (p :border-calc
-                                     (if (and viewer? cached-stroke-color-single)
-                                       (let [viewer-border (viewer-border-fn cached-stroke-color-single)]
-                                         (str (or (:width viewer-border)      ; 变量宽度
-                                                  stroke-width)               ; 默认宽度
-                                              "px "
-                                              (or (color-to-rgba (:color viewer-border)    ; 变量颜色
-                                                                 (:opacity viewer-border))  ; 变量透明度
-                                                  (str "rgba(" sr ", " sg ", " sb ", " sa ")")) ; 默认颜色
-                                              " " (or (:stroke-style viewer-border) ; 变量样式
-                                                      border-style)))            ; 默认样式
-                                       property-border))
+                                      (if (and viewer? cached-stroke-color-single)
+                                        (let [viewer-border (viewer-border-fn cached-stroke-color-single)]
+                                          (str (or (:width viewer-border)      ; 变量宽度
+                                                   stroke-width)               ; 默认宽度
+                                               "px "
+                                               (or (color-to-rgba (:color viewer-border)    ; 变量颜色
+                                                                  (:opacity viewer-border))  ; 变量透明度
+                                                   (str "rgba(" sr ", " sg ", " sb ", " sa ")")) ; 默认颜色
+                                               " " (or (:stroke-style viewer-border) ; 变量样式
+                                                       border-style)))            ; 默认样式
+                                        property-border))
         ;; === 背景动画控制 ===
         ;; 控制背景动画的开关状态
         bg-open                    (when viewer?
@@ -533,13 +533,13 @@
         ;; === 禁用时的颜色处理 ===
         ;; 只有在控件被禁用时才处理禁用颜色，避免不必要的计算
         hidden-color              (when (and (not (nil? operation)) (not operation))
-                                     (let [hidden-color-property (:hidden-color property) ; 禁用颜色配置
-                                           hidden-opacity        (or(:fill-opacity hidden-color-property)
-                                                                    (:opacity hidden-color-property) 1) ; 禁用时透明度
-                                           hicolor               (or (:fill-color hidden-color-property)
-                                                                     (:color hidden-color-property) default-color) ; 禁用时颜色
-                                           [hr hg hb ha]         (hex->rgba hicolor hidden-opacity)] ; 转换为RGBA
-                                       (str "rgba(" hr ", " hg ", " hb ", " ha ")")))  ; 格式化颜色字符串
+                                    (let [hidden-color-property (:hidden-color property) ; 禁用颜色配置
+                                          hidden-opacity        (or(:fill-opacity hidden-color-property)
+                                                                   (:opacity hidden-color-property) 1) ; 禁用时透明度
+                                          hicolor               (or (:fill-color hidden-color-property)
+                                                                    (:color hidden-color-property) default-color) ; 禁用时颜色
+                                          [hr hg hb ha]         (hex->rgba hicolor hidden-opacity)] ; 转换为RGBA
+                                      (str "rgba(" hr ", " hg ", " hb ", " ha ")")))  ; 格式化颜色字符串
         ;; === 阴影效果处理 ===
         ;; 阴影属性键值重命名函数
         handle-shadow              (fn [shadow]
@@ -563,30 +563,30 @@
     ;; 使用cond->进行条件式样式合并，基础样式始终存在
     ;; 生成组件最终样式（无 cond->，一次性构造 map）
     (p :final-map-creation
-      {:position        "relative"           ; 相对定位，便于子组件绝对定位
-       :width           width                ; 动态宽度
-       :height          height               ; 动态高度
-       :lineHeight      0                    ; 行高为 0，避免文本偏移
-       :overflow        "hidden"             ; 隐藏溢出内容
-       :borderRadius    border-radius        ; 圆角半径
-       :boxShadow       (if shadow
-                          (find-box-shadow shape shadow) ; 自定义阴影
-                          (find-box-shadow shape))       ; 默认阴影
-       :border          border                ; 边框样式
-       :opacity         opacity               ; 控件透明度（影响背景/图片/内容）
-       :background
-       (p :final-map-bg
-       (cond
-         ;; -------- 禁用状态背景色 --------
-         (and (some? operation)
-              (not operation)
-              hidden-color)
-         hidden-color
+       {:position        "relative"           ; 相对定位，便于子组件绝对定位
+        :width           width                ; 动态宽度
+        :height          height               ; 动态高度
+        :lineHeight      0                    ; 行高为 0，避免文本偏移
+        :overflow        "hidden"             ; 隐藏溢出内容
+        :borderRadius    border-radius        ; 圆角半径
+        :boxShadow       (if shadow
+                           (find-box-shadow shape shadow) ; 自定义阴影
+                           (find-box-shadow shape))       ; 默认阴影
+        :border          border                ; 边框样式
+        :opacity         opacity               ; 控件透明度（影响背景/图片/内容）
+        :background
+        (p :final-map-bg
+           (cond
+             ;; -------- 禁用状态背景色 --------
+             (and (some? operation)
+                  (not operation)
+                  hidden-color)
+             hidden-color
 
-         ;; -------- 背景动画开启：清空背景 --------
-         bg-open
-         ""
+             ;; -------- 背景动画开启：清空背景 --------
+             bg-open
+             ""
 
-         ;; -------- 默认背景：来自 background 配置 --------
-         :else
-         (:background background)))})))
+             ;; -------- 默认背景：来自 background 配置 --------
+             :else
+             (:background background)))})))
