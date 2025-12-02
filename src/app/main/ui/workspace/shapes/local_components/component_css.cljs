@@ -1,7 +1,6 @@
 (ns app.main.ui.workspace.shapes.local-components.component-css
   (:require
    [cuerdas.core :as str]
-   [taoensso.tufte :as tufte :refer (p)]
    [clojure.set :as set]))
 
 ;; --- From app.common.types.shape.attrs ---
@@ -253,6 +252,37 @@
 
 (def color-to-rgba (memoize color-to-rgba-impl))
 
+(defn- normalize-shadow
+  "Normalize various shadow payloads into a flat map for CSS generation."
+  [shadow]
+  (when shadow
+    (let [color-map (:color shadow)
+          color     (or (:color color-map) (:color shadow))
+          opacity   (or (:opacity color-map) (:opacity shadow) 1)]
+      {:style    (:style shadow)
+       :offset-x (or (:offset-x shadow) 0)
+       :offset-y (or (:offset-y shadow) 0)
+       :blur     (or (:blur shadow) 0)
+       :spread   (or (:spread shadow) 0)
+       :color    color
+       :opacity  opacity})))
+
+(def ^:private shadow->css
+  "Memoized box-shadow builder to avoid repeating string/rgba work."
+  (memoize
+   (fn [{:keys [style offset-x offset-y blur spread color opacity] :as shadow}]
+     (when shadow
+       (let [inner-shadow-out (if (or (= :inner-shadow style) (= "inner-shadow" style))
+                                "inset "
+                                "")
+             color-str        (color-to-rgba color opacity)]
+         (str inner-shadow-out
+              offset-x "px "
+              offset-y "px "
+              blur "px "
+              spread "px "
+              color-str))))))
+
 (defn linear-radial-color
   "实现纯色,线性渐变,径向渐变
    线性渐变默认从左向右
@@ -276,35 +306,11 @@
 (defn find-box-shadow
   "找box的阴影内容"
   ([shape]
-   (let [shadows (nth (:shadow shape) 0 nil)
-         c-map   (:color shadows)
-         style   (:style shadows)
-         color   (:color c-map)
-         opacity (:opacity c-map)
-         inner-shadow-out (if (or (= :inner-shadow style) (= "inner-shadow" style))
-                            "inset "
-                            "")
-         color-str        (color-to-rgba color opacity)]
-     (str inner-shadow-out
-          (:offset-x shadows) "px "
-          (:offset-y shadows) "px "
-          (:blur shadows) "px "
-          (:spread shadows) "px "
-          color-str)))
+   (when-let [shadow (normalize-shadow (nth (:shadow shape) 0 nil))]
+     (shadow->css shadow)))
   ([shape shadows]
-   (let [style   (:style shadows)
-         color   (:color shadows)
-         opacity (:opacity shadows)
-         inner-shadow-out (if (or (= :inner-shadow style) (= "inner-shadow" style))
-                            "inset "
-                            "")
-         color-str        (color-to-rgba color opacity)]
-     (str inner-shadow-out
-          (:offset-x shadows) "px "
-          (:offset-y shadows) "px "
-          (:blur shadows) "px "
-          (:spread shadows) "px "
-          color-str))))
+   (when-let [shadow (normalize-shadow shadows)]
+     (shadow->css shadow))))
 
 (def component-css-shape-keys
   [:rx :ry :r1 :r2 :r3 :r4 :fills :strokes :shadow :auto-width :auto-height])
@@ -316,9 +322,66 @@
 (defn prepare-component-css-args
   "提取组件样式所需的字段，避免无关数据触发重复计算"
   [{:keys [shape property] :as args}]
-  (cond-> args
-    shape (assoc :shape (select-keys shape component-css-shape-keys))
-    property (assoc :property (select-keys property component-css-property-keys))))
+  (let [shape*    (when shape (select-keys shape component-css-shape-keys))
+        property* (when property (select-keys property component-css-property-keys))
+        ;; 预计算圆角字符串以便复用
+        border-radius (when shape*
+                        (if (contains? shape* :rx)
+                          (str (or (:rx shape*) 0) "px "
+                               (or (:ry shape*) 0) "px")
+                          (str (or (:r1 shape*) 0) "px "
+                               (or (:r2 shape*) 0) "px "
+                               (or (:r3 shape*) 0) "px "
+                               (or (:r4 shape*) 0) "px")))
+        ;; 预计算默认阴影字符串
+        shape-shadow (when shape*
+                       (normalize-shadow (nth (:shadow shape*) 0 nil)))
+        precomputed-shadow (when shape-shadow
+                             (shadow->css shape-shadow))
+        ;; 预计算基础背景色（不含按下态、动画等动态内容）
+        fills             (:fills shape*)
+        first-fill        (nth fills 0 nil)
+        fill-opacity      (:fill-opacity first-fill)
+        fill-color        (:fill-color first-fill)
+        fill-gradient     (:fill-color-gradient first-fill)
+        base-background   (cond
+                            fill-gradient (gradient->css fill-gradient)
+                            (and fill-color fill-opacity)
+                            (let [[r g b a] (hex->rgba fill-color fill-opacity)]
+                              (str "rgba(" r ", " g ", " b ", " a ")"))
+                            :else nil)
+        ;; 预计算描边字符串
+        strokes           (nth (:strokes shape*) 0 nil)
+        stroke-color      (:stroke-color strokes)
+        stroke-opacity    (:stroke-opacity strokes)
+        stroke-rgba       (when (and stroke-color stroke-opacity)
+                            (hex->rgba stroke-color stroke-opacity))
+        stroke-width      (:stroke-width strokes)
+        stroke-style-raw  (:stroke-style strokes)
+        border-style      (case stroke-style-raw
+                            :dashed "dashed"
+                            :solid  "solid"
+                            :dotted "dotted"
+                            :mixed  "double"
+                            "solid")
+        property-border   (when stroke-rgba
+                            (let [[sr sg sb sa] stroke-rgba]
+                              (str stroke-width "px "
+                                   (str "rgba(" sr ", " sg ", " sb ", " sa ")")
+                                   " " border-style)))]
+    (cond-> args
+      shape (assoc :shape (cond-> shape*
+                            border-radius (assoc :border-radius-str border-radius)
+                            precomputed-shadow (assoc :precomputed-shadow precomputed-shadow)
+                            base-background (assoc :base-background base-background)
+                            stroke-rgba (assoc :stroke-rgba stroke-rgba)
+                            property-border (assoc :property-border property-border)
+                            border-style (assoc :border-style border-style)))
+      property (assoc :property property*))))
+
+(def prepare-component-css-args-memoized
+  "缓存版本，用于相同形状/属性的重复调用"
+  (memoize prepare-component-css-args))
 
 (defn component-css
   "组件CSS样式生成函数-处理组件的视觉样式
@@ -329,19 +392,20 @@
    `property` - 控件的属性信息（自定义属性、配置等）
    `viewer?` - 是否为预览模式
    `is-pressed?` - 按钮是否处于按下状态
-   `external-variable-cache` - 外部变量缓存（用于存储动态变量值）
-   `graphic-all` - 全局图片库 map
-   `advance-button-status` - 高级控件状态 map"
+  `external-variable-cache` - 外部变量缓存（用于存储动态变量值）
+  `graphic-all` - 全局图片库 map
+  `advance-button-status` - 高级控件状态 map"
   [{:keys [shape property viewer? is-pressed? external-variable-cache graphic-all advance-button-status]}]
   (let [;; === 边框圆角处理 ===
         ;; 支持两种圆角模式：统一圆角(rx/ry)和四角独立圆角(r1/r2/r3/r4)
-        border-radius              (if (contains? shape :rx)
-                                     (str (or (:rx shape) 0) "px "
-                                          (or (:ry shape) 0) "px")
-                                     (str (or (:r1 shape) 0) "px "
-                                          (or (:r2 shape) 0) "px "
-                                          (or (:r3 shape) 0) "px "
-                                          (or (:r4 shape) 0) "px"))
+        border-radius              (or (:border-radius-str shape)
+                                       (if (contains? shape :rx)
+                                         (str (or (:rx shape) 0) "px "
+                                              (or (:ry shape) 0) "px")
+                                         (str (or (:r1 shape) 0) "px "
+                                              (or (:r2 shape) 0) "px "
+                                              (or (:r3 shape) 0) "px "
+                                              (or (:r4 shape) 0) "px")))
         
         ;; === 填充颜色处理 ===
         fills                      (get shape :fills) ; 获取填充配置数组
@@ -377,19 +441,18 @@
         ;; === 背景颜色计算 ===
         ;; 优先级：按下状态颜色 > 渐变色 > 普通填充色
         background-color           (let [click-down-color (:click-down-color property)]
-                                     (if (and is-pressed? (not (str/blank? (:color click-down-color))))
-                                       ;; 按下状态：使用按下时的颜色配置
-                                       (let [click-color   (:color click-down-color)
-                                             click-opacity (-> click-down-color :opacity)
-                                             [cr cg cb ca] (hex->rgba click-color click-opacity)]
-                                         (str "rgba(" cr ", " cg ", " cb ", " ca ")"))
-                                       ;; 非按下状态：检查是否有渐变色
-                                       (if fill-color-gradient
-                                         ;; 有渐变：转换渐变为CSS格式
-                                         (gradient->css fill-color-gradient)
-                                         ;; 无渐变：使用普通颜色
-                                         (when (and (some? fill-color) (some? fill-opacity))
-                                           (str "rgba(" r ", " g ", " b ", " a ")")))))
+                                      (if (and is-pressed? (not (str/blank? (:color click-down-color))))
+                                        ;; 按下状态：使用按下时的颜色配置
+                                        (let [click-color   (:color click-down-color)
+                                              click-opacity (-> click-down-color :opacity)
+                                              [cr cg cb ca] (hex->rgba click-color click-opacity)]
+                                          (str "rgba(" cr ", " cg ", " cb ", " ca ")"))
+                                        ;; 非按下状态：使用预计算或即时计算的背景色/渐变
+                                        (or (:base-background shape)
+                                            (when fill-color-gradient
+                                              (gradient->css fill-color-gradient))
+                                            (when (and (some? fill-color) (some? fill-opacity))
+                                              (str "rgba(" r ", " g ", " b ", " a ")")))))
         ;; === 背景图片处理 ===
         ;; 背景图片的优先级和来源判断
         ;; 缓存重复计算的变量
@@ -471,14 +534,16 @@
         stroke-width               (:stroke-width strokes)      ; 描边宽度
         stroke-style-raw           (:stroke-style strokes)      ; 描边样式（原始值）
         ;; 将描边颜色转换为RGBA值
-        [sr sg sb sa]              (hex->rgba stroke-color stroke-opacity)
+        [sr sg sb sa]              (or (:stroke-rgba shape)
+                                      (hex->rgba stroke-color stroke-opacity))
         ;; 描边样式映射：将内部样式转换为CSS样式
-        border-style               (case stroke-style-raw
-                                     :dashed "dashed" ; 虚线
-                                     :solid  "solid"  ; 实线
-                                     :dotted "dotted" ; 点线
-                                     :mixed  "double" ; 双线
-                                     "solid")          ; 默认实线
+        border-style               (or (:border-style shape)
+                                       (case stroke-style-raw
+                                         :dashed "dashed" ; 虚线
+                                         :solid  "solid"  ; 实线
+                                         :dotted "dotted" ; 点线
+                                         :mixed  "double" ; 双线
+                                         "solid"))          ; 默认实线
         ;; === 预览模式下的动态边框 ===
         ;; 处理变量绑定的边框属性，重命名键值以匹配内部格式
         viewer-border-fn           (fn [border-var]
@@ -489,9 +554,10 @@
                                        "Width"        :width ; 边框宽度
                                        "BorderType"   :stroke-style})) ; 边框样式
         ;; 编辑模式下的边框样式字符串
-        property-border            (str stroke-width "px "
-                                        (str "rgba(" sr ", " sg ", " sb ", " sa ")")
-                                        " " border-style)
+        property-border            (or (:property-border shape)
+                                       (str stroke-width "px "
+                                            (str "rgba(" sr ", " sg ", " sb ", " sa ")")
+                                            " " border-style))
         ;; 最终边框样式：预览模式优先使用变量值，否则使用默认值
         border                     (if (and viewer? cached-stroke-color-single)
                                      (let [viewer-border (viewer-border-fn cached-stroke-color-single)]
@@ -563,7 +629,8 @@
         ;; === Box Shadow 计算提前 ===
         box-shadow-val            (if shadow
                                     (find-box-shadow shape shadow) ; 自定义阴影
-                                    (find-box-shadow shape))       ; 默认阴影
+                                    (or (:precomputed-shadow shape)
+                                        (find-box-shadow shape)))       ; 默认阴影
         
         ;; === Background 计算提前 ===
         background-val            (cond
@@ -593,4 +660,3 @@
      :border          border               ; 边框样式
      :opacity         opacity              ; 控件透明度（影响背景/图片/内容）
      :background      background-val}))   ; 背景
-
